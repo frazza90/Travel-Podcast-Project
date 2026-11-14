@@ -1,0 +1,67 @@
+import gradio as gr
+import os
+import json
+from data_processor import load_master_dataset
+from llm_processor import generate_podcast_transcript
+from tts_generator import generate_multi_voice_podcast
+
+def run_podcast_pipeline():
+    """
+    Executes the full end-to-end podcast pipeline when the button is clicked:
+    1. Ingests PDFs into pandas DataFrame
+    2. Sends corpus to OpenAI to create the JSON dialogue script (Chris & Isabella)
+    3. Converts dialogue into multi-voice speech and stitches into an MP3
+    """
+    print("🚀 Starting podcast generation pipeline via Gradio UI...")
+    
+    # 1. Load Master Dataset from PDFs
+    df_master = load_master_dataset()
+    
+    # 2. Generate JSON Script
+    podcast_data = generate_podcast_transcript(df_master)
+    if not podcast_data:
+        return None, "❌ Error: Failed to generate podcast script from LLM."
+    
+    json_path = "podcast_transcript.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(podcast_data, f, indent=4, ensure_ascii=False)
+        
+    # 3. Generate Multi-Voice Audio (Chris & Isabella)
+    output_mp3 = r"C:\Users\Helen\Desktop\Chris Ironhack\Week 4\Lesson 3\hong_kong_podcast.mp3"
+    generated_audio_path = generate_multi_voice_podcast(json_path=json_path, output_path=output_mp3)
+    
+    if not generated_audio_path or not os.path.exists(output_mp3):
+        return None, "❌ Error: Failed during audio stitching."
+    
+    # Format JSON transcript for clean display in the text box
+    formatted_transcript = json.dumps(podcast_data, indent=2, ensure_ascii=False)
+    
+    return output_mp3, formatted_transcript
+
+# --- Build the Gradio Web Interface ---
+with gr.Blocks() as demo:  # Removed theme from here
+    gr.Markdown("# 🎙️ AI Podcast Studio: Hong Kong Travel Guide")
+    gr.Markdown(
+        "Welcome to your automated podcast studio! Click the button below to ingest your travel PDFs, "
+        "synthesize a script featuring **Chris (Male - Onyx)** and **Isabella (Female - Shimmer)**, "
+        "and generate your finished podcast MP3."
+    )
+    
+    with gr.Row():
+        generate_btn = gr.Button("🚀 Generate Podcast", variant="primary", scale=1)
+        
+    with gr.Row():
+        with gr.Column(scale=1):
+            audio_output = gr.Audio(label="🎧 Listen to Generated Podcast", type="filepath")
+        with gr.Column(scale=1):
+            script_output = gr.Textbox(label="📝 Generated JSON Transcript", lines=14)
+            
+    generate_btn.click(
+        fn=run_podcast_pipeline,
+        inputs=[],
+        outputs=[audio_output, script_output]
+    )
+
+if __name__ == "__main__":
+    # Moved theme=gr.themes.Soft() into launch() here:
+    demo.launch(theme=gr.themes.Soft(), server_name="127.0.0.1", server_port=7860)
